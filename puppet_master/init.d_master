@@ -1,0 +1,35 @@
+### BEGIN INIT INFO
+# Provides:          puppetmasterd
+# Required-Start:    $local_fs $remote_fs $network $syslog
+# Required-Stop:     $local_fs $remote_fs $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts the puppet master node
+# Description:       starts the puppet master node with thin server
+### END INIT INFO
+
+DAEMON=/var/lib/gems/1.8/bin/thin
+SCRIPT_NAME=/usr/local/lib/site_ruby/1.8/puppet/rack/config.ru
+ROLE_NAME=puppetmasterd
+DAEMON_OPTS="-P /var/run/puppet/$ROLE_NAME.pid --socket /var/run/puppet/$ROLE_NAME.sock -e production --servers 1 --daemonize --chdir /etc/puppet/ --user puppet --group puppet -R $SCRIPT_NAME"
+    
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+  
+case "$1" in
+  start)
+        $DAEMON start $DAEMON_OPTS
+        ;;
+  stop)
+        $DAEMON stop $DAEMON_OPTS
+        ;;
+  restart|force-reload|reload)
+        $DAEMON restart $DAEMON_OPTS
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}" >&2
+        exit 3
+        ;;
+esac
+    
+:   
