@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# The Marionetist - A puppet installation tool
+# The Marionettist - A puppet installation tool
 # author: kurt/yuweb <garnier.etienne@gmail.com>
 #
 
@@ -8,11 +8,11 @@
 # -----------------
 
 # Supported Linux distributions
-SUPPORTED=( Debian Ubuntu )           # Supported Linux distributions
-PUPPET='puppet-2.6.6.tar.gz'          # Puppet version
+SUPPORTED=( Debian )           # Supported Linux distributions
+PUPPET='puppet-2.6.8.tar.gz'          # Puppet version
 FACTER='facter-1.5.8.tar.gz'          # Facter version
-REPO='https://github.com/garnieretienne/install_puppet/raw/master' # HTTP repo for templates
-LOG='/tmp/install_puppet_master.log'  # Log file (regular command output are writted here)
+REPO='https://github.com/garnieretienne/marionettist/raw/develop' # HTTP repo for templates
+LOG='/tmp/marionettist.log'  # Log file (regular command output are writted here)
 
 # Template variables declaration
 # ------------------------------
