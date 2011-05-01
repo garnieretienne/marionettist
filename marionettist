@@ -153,7 +153,7 @@ general_step_download_puppet_sources() {
     *)
       cd /tmp  >> $LOG 2>> $LOG
      # register the puppet labs master key
-      echo '>  download master key (4BD6EC30)'  >> $LOG 2>> $LOG
+      echo '>  download master key (4BD6EC30)'
       gpg --recv-key 4BD6EC30  >> $LOG 2>> $LOG
      # download puppet and facter (and their signs)
       echo '>  download facter'
@@ -161,12 +161,11 @@ general_step_download_puppet_sources() {
       wget http://puppetlabs.com/downloads/facter/$FACTER.sign  >> $LOG 2>> $LOG
       echo '>  download puppet'
       wget http://puppetlabs.com/downloads/puppet/$PUPPET  >> $LOG 2>> $LOG
-      wget http://puppetlabs.com/downloads/puppet/$PUPPET.sign  >> $LOG 2>> $LOG
+      wget http://puppetlabs.com/downloads/puppet/$PUPPET.asc  >> $LOG 2>> $LOG
      # check the downloaded files with respective signs
       echo '>  check files integrity' #TODO: stop if sign failed
-      gpg --verify $FACTER.sign $FACTER  >> $LOG 2>> $LOG
-      gpg --verify $PUPPET.sign $PUPPET   >> $LOG 2>> $LOG
-      #TODO: check and exit if bad signs
+      if ! gpg --verify $FACTER.sign $FACTER  >> $LOG 2>> $LOG; then echo "!! checksum for $FACTER failed"; exit 1; fi
+      if ! gpg --verify $PUPPET.asc $PUPPET   >> $LOG 2>> $LOG; then echo "!! checksum for $PUPPET failed"; exit 1; fi
       ;;
   esac
 }
