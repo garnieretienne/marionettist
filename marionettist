@@ -7,12 +7,11 @@
 # Internals options
 # -----------------
 
-# Supported Linux distributions
-SUPPORTED=( Debian )           # Supported Linux distributions
+SUPPORTED=( Debian )                  # Supported Linux distributions
 PUPPET='puppet-2.6.8.tar.gz'          # Puppet version
 FACTER='facter-1.5.8.tar.gz'          # Facter version
 REPO='https://github.com/garnieretienne/marionettist/raw/develop' # HTTP repo for templates
-LOG='/tmp/marionettist.log'  # Log file (regular command output are writted here)
+LOG='/tmp/marionettist.log'           # Log file (regular command output are writted here)
 
 # Template variables declaration
 # ------------------------------
@@ -154,7 +153,7 @@ general_step_download_puppet_sources() {
       cd /tmp  >> $LOG 2>> $LOG
      # register the puppet labs master key
       echo '>  download master key (4BD6EC30)'
-      gpg --recv-key 4BD6EC30  >> $LOG 2>> $LOG
+      gpg --keyserver pool.sks-keyservers.net --recv-key 4BD6EC30  >> $LOG 2>> $LOG
      # download puppet and facter (and their signs)
       echo '>  download facter'
       wget http://puppetlabs.com/downloads/facter/$FACTER  >> $LOG 2>> $LOG
