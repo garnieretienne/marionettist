@@ -13,11 +13,11 @@ FACTER='facter-1.5.8.tar.gz'          # Facter version
 REPO='https://github.com/garnieretienne/marionettist/raw/develop' # HTTP repo for templates
 LOG='/tmp/marionettist.log'           # Log file (regular command output are writted here)
 
-# Template variables declaration
+# Template default variables declaration
 # ------------------------------
 declare -A templates
 templates=(
-  ["fqdn"]=$(hostname -f)         # full qualified domain name
+  ["fqdn"]=$(hostname -f)             # full qualified domain name
 )
 
 # Options
@@ -124,9 +124,9 @@ general_step_check_root(){
 master_step_install_dependencies() {
   case $DISTRO in
     Debian)
-     # install ruby stack
+      # install ruby stack
       apt-get --quiet --yes install ruby rubygems libopenssl-ruby >> $LOG 2>> $LOG
-     # install latest nginx from dotdeb repo (best ssl client verify option)
+      # install latest nginx from dotdeb repo (best ssl client verify option)
       echo '>  install latest stable nginx (setup dotdeb repo)'
       echo "deb http://packages.dotdeb.org stable all" > /etc/apt/sources.list.d/dotdeb.list  >> $LOG 2>> $LOG
       echo "deb-src http://packages.dotdeb.org stable all" >> /etc/apt/sources.list.d/dotdeb.list  >> $LOG 2>> $LOG
@@ -134,12 +134,27 @@ master_step_install_dependencies() {
       cat dotdeb.gpg | sudo apt-key add -  >> $LOG 2>> $LOG
       apt-get --quiet --yes update   >> $LOG 2>> $LOG
       apt-get --quiet --yes install nginx  >> $LOG 2>> $LOG
-     # install thin (http server in ruby), better than Webrick (the default one)
+      # install thin (http server in ruby), better than Webrick (the default one)
       echo '>  install thin'
       gem install thin  >> $LOG 2>> $LOG
       ;;
     *)
-      echo "!! your distribution ($DISTRO) has no declarations for 'step_master_install_dependencies()'"
+      echo "!! your distribution ($DISTRO) has no declarations for 'master_step_install_dependencies()'"
+      exit 1
+      ;;
+  esac
+}
+
+# Agent installation step:
+# Install all needed dependencies
+agent_step_install_dependencies() {
+  case $DISTRO in
+    Debian)
+      # install ruby stack
+      apt-get --quiet --yes install ruby rubygems libopenssl-ruby >> $LOG 2>> $LOG
+      ;;
+    *)
+      echo "!! your distribution ($DISTRO) has no declarations for 'agent_step_install_dependencies()'"
       exit 1
       ;;
   esac
@@ -151,17 +166,17 @@ general_step_download_puppet_sources() {
   case $DISTRO in
     *)
       cd /tmp  >> $LOG 2>> $LOG
-     # register the puppet labs master key
+      # register the puppet labs master key
       echo '>  download master key (4BD6EC30)'
       gpg --keyserver pool.sks-keyservers.net --recv-key 4BD6EC30  >> $LOG 2>> $LOG
-     # download puppet and facter (and their signs)
+      # download puppet and facter (and their signs)
       echo '>  download facter'
       wget http://puppetlabs.com/downloads/facter/$FACTER  >> $LOG 2>> $LOG
       wget http://puppetlabs.com/downloads/facter/$FACTER.sign  >> $LOG 2>> $LOG
       echo '>  download puppet'
       wget http://puppetlabs.com/downloads/puppet/$PUPPET  >> $LOG 2>> $LOG
       wget http://puppetlabs.com/downloads/puppet/$PUPPET.asc  >> $LOG 2>> $LOG
-     # check the downloaded files with respective signs
+      # check the downloaded files with respective signs
       echo '>  check files integrity' #TODO: stop if sign failed
       if ! gpg --verify $FACTER.sign $FACTER  >> $LOG 2>> $LOG; then echo "!! checksum for $FACTER failed"; exit 1; fi
       if ! gpg --verify $PUPPET.asc $PUPPET   >> $LOG 2>> $LOG; then echo "!! checksum for $PUPPET failed"; exit 1; fi
@@ -208,44 +223,72 @@ general_step_install_puppet() {
 master_step_configure_puppet_master() {
   case $DISTRO in
     Debian)
-     # grab the first site_ruby directory, used by install.rb
+      # grab the first site_ruby directory, used by install.rb
       site_ruby=$(ruby -e 'puts $:.first')
-     # get a config.ru for thin
+      # get a config.ru for thin
       wget --no-check-certificate $REPO/puppet_master/config.ru  >> $LOG 2>> $LOG
       mkdir $site_ruby/puppet/rack  >> $LOG 2>> $LOG
       mv config.ru $site_ruby/puppet/rack/config.ru  >> $LOG 2>> $LOG
       chown puppet:puppet $site_ruby/puppet/rack/config.ru  >> $LOG 2>> $LOG
-     # generate a basic config file
+      # generate a basic config file
       echo '>  generate config file'
       wget --no-check-certificate $REPO/puppet_master/puppet.conf  >> $LOG 2>> $LOG
-     # set the fqdn as certname
+      # set the fqdn as certname
       template puppet.conf
       mv puppet.conf /etc/puppet/puppet.conf  >> $LOG 2>> $LOG
       puppetmasterd --onetime  >> $LOG 2>> $LOG
       kill `cat /var/run/puppet/master.pid`  >> $LOG 2>> $LOG
-     # puppet need this folder and thin+config.ru won't start if it not created
+      # puppet need this folder and thin+config.ru won't start if it not created
       mkdir /var/lib/puppet/rrd >> $LOG 2>> $LOG
       chown puppet:puppet /var/lib/puppet/rrd  >> $LOG 2>> $LOG
-     # register the init.d service script (master)
-      echo '>  configure puppet in nginx/thin'
+      # register the init.d service script (master)
+      echo '>  register puppet service'
       wget --no-check-certificate $REPO/puppet_master/init.d_master  >> $LOG 2>> $LOG
       mv init.d_master /etc/init.d/puppetmasterd  >> $LOG 2>> $LOG
       chmod +x /etc/init.d/puppetmasterd  >> $LOG 2>> $LOG
       update-rc.d puppetmasterd defaults  >> $LOG 2>> $LOG
-     # set up the puppet vhost in nginx and enable it
+      echo '>  configure puppet in nginx/thin'
+      # set up the puppet vhost in nginx and enable it
       wget --no-check-certificate $REPO/puppet_master/vhost_puppet  >> $LOG 2>> $LOG
       template vhost_puppet
       mv vhost_puppet /etc/nginx/sites-available/puppet
       ln -s /etc/nginx/sites-available/puppet /etc/nginx/sites-enabled/puppet  >> $LOG 2>> $LOG
       service nginx reload  >> $LOG 2>> $LOG
-     # register the init.d service script (agent)
+      # register the init.d service script (agent)
       echo '>  configure puppet agent'
       wget --no-check-certificate $REPO/puppet_agent/init.d_agent  >> $LOG 2>> $LOG
       mv init.d_agent /etc/init.d/puppetd  >> $LOG 2>> $LOG
       chmod +x /etc/init.d/puppetd  >> $LOG 2>> $LOG
+      update-rc.d puppetd defaults  >> $LOG 2>> $LOG
       ;;
     *)
-      echo "!! your distribution ($DISTRO) has no declarations for 'general_step_install_puppet()'"
+      echo "!! your distribution ($DISTRO) has no declarations for 'master_step_configure_puppet_master()'"
+      exit 1
+      ;;
+  esac
+}
+
+# Agent installation step:
+# Finish puppet installation and configuration 
+# (service scripts, configuration files, etc...)
+agent_step_configure_puppet_agent() {
+    case $DISTRO in
+    Debian)
+      # generate a basic config file
+      echo '>  generate config file'
+      templates["puppet_master"]=$SERVER
+      wget --no-check-certificate $REPO/puppet_agent/puppet.conf  >> $LOG 2>> $LOG
+      template puppet.conf
+      mv puppet.conf /etc/puppet/puppet.conf  >> $LOG 2>> $LOG
+      # register the init.d service script (agent)
+      echo '>  register puppet service'
+      wget --no-check-certificate $REPO/puppet_agent/init.d_agent  >> $LOG 2>> $LOG
+      mv init.d_agent /etc/init.d/puppetd  >> $LOG 2>> $LOG
+      chmod +x /etc/init.d/puppetd  >> $LOG 2>> $LOG
+      update-rc.d puppetd defaults  >> $LOG 2>> $LOG
+      ;;
+    *)
+      echo "!! your distribution ($DISTRO) has no declarations for 'agent_step_configure_puppet_agent()'"
       exit 1
       ;;
   esac
@@ -283,6 +326,21 @@ master_step_start_services() {
   esac
 }
 
+# Agent installation step:
+# Start the services (puppet agent)
+agent_step_start_services() {
+    case $DISTRO in
+    Debian)
+      echo '>  start master agent'
+      service puppetd start  >> $LOG 2>> $LOG
+      ;;
+    *)
+      echo "!! your distribution ($DISTRO) has no declarations for 'agent_step_start_services()'"
+      exit 1
+      ;;
+  esac
+}
+
 # Download, install, configure and start 
 # a puppet master and a puppet agent on the server
 install_puppet_master() {
@@ -304,6 +362,27 @@ install_puppet_master() {
   master_step_start_services
 }
 
+# Download, install, configure and start 
+# a puppet agent on the host
+install_puppet_agent() {
+  echo ">> install a puppet agent node"
+  general_step_check_root
+  echo ">> output and errors available to $LOG"
+  echo '>> install dependencies'
+  agent_step_install_dependencies
+  echo '>> download puppet sources'
+  general_step_download_puppet_sources
+  echo ">> install facter ($FACTER)"
+  general_step_install_facter
+  echo ">> install puppet ($PUPPET)"
+  general_step_install_puppet
+  agent_step_configure_puppet_agent
+  echo '>> clean folders'
+  general_step_clean_folders
+  echo '>> start puppet'
+  agent_step_start_services
+}
+
 # Controller
 # ----------
 
@@ -322,6 +401,15 @@ then
   if is_supported? $DISTRO 
   then
     install_puppet_master
+  else
+    echo "!! your distribution ($DISTRO) is not supported"
+  fi
+elif $AGENT && ! $MASTER # means the user want to install an agent
+then
+  DISTRO=$(lsb_release -si)
+  if is_supported? $DISTRO
+  then
+    install_puppet_agent
   else
     echo "!! your distribution ($DISTRO) is not supported"
   fi
