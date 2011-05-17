@@ -442,7 +442,7 @@ master_step_install_git_repo() {
       chmod 700 update_repo  >> $LOG 2>> $LOG
       chown git:git update_repo  >> $LOG 2>> $LOG
       mkdir /var/git/bin  >> $LOG 2>> $LOG
-      mv /tmp/update-repo /var/git/bin/  >> $LOG 2>> $LOG
+      mv /tmp/update_repo /var/git/bin/  >> $LOG 2>> $LOG
       echo '>  init modules repository'
       init_repo modules
       link_repo modules '/var/lib/puppet/modules'
