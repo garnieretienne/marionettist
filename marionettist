@@ -164,6 +164,7 @@ link_repo() {
   cd $path/..  >> $LOG 2>> $LOG
   rm -rf $path  >> $LOG 2>> $LOG
   git clone /var/git/repositories/$repo.git  >> $LOG 2>> $LOG
+  chown -R git:git $path  >> $LOG 2>> $LOG
 }
 
 # Step and install functions
@@ -436,8 +437,6 @@ master_step_install_git_repo() {
       chown root:root $LOG # now, root only can log in logfile
       echo '>  get update_repo script'
       cd /tmp
-      #wget http://ge.tt/5cZ5k4h/update_repo?type=download  >> $LOG 2>> $LOG # TODO: wget github
-      #mv update_repo?type=download update_repo
       wget --no-check-certificate $REPO/puppet_master/update_repo >> $LOG 2>> $LOG
       chmod 700 update_repo  >> $LOG 2>> $LOG
       chown git:git update_repo  >> $LOG 2>> $LOG
@@ -454,18 +453,16 @@ master_step_install_git_repo() {
       link_repo manifests '/etc/puppet/manifests'
       echo '>  configure repositories in git (modules, manifests, files)'
       cd /tmp
-      #wget http://ge.tt/43uIjZ4/gitosis.conf?type=download  >> $LOG 2>> $LOG # TODO: wget github
-      #mv gitosis.conf?type=download gitosis.conf
       wget --no-check-certificate $REPO/puppet_master/gitosis.conf >> $LOG 2>> $LOG
       template gitosis.conf
-      git clone /var/git/repositories/gitosis-admin.git  >> $LOG 2>> $LOG
+      su  git -c "git clone /var/git/repositories/gitosis-admin.git  >> $LOG 2>> $LOG"
       mv gitosis.conf gitosis-admin/gitosis.conf  >> $LOG 2>> $LOG
       cd gitosis-admin  >> $LOG 2>> $LOG
-      git add gitosis.conf  >> $LOG 2>> $LOG
-      git config --global user.name "Puppet master install script ($KEYNAME)"  >> $LOG 2>> $LOG
-      git config --global user.email nil@nomail.tld  >> $LOG 2>> $LOG
-      git commit -m 'Create puppets repos'  >> $LOG 2>> $LOG
-      git push  >> $LOG 2>> $LOG
+      su  git -c "git add gitosis.conf  >> $LOG 2>> $LOG"
+      su  git -c "git config --global user.name \"Puppet master install script ($KEYNAME)\"  >> $LOG 2>> $LOG"
+      su  git -c "git config --global user.email nil@nomail.tld  >> $LOG 2>> $LOG"
+      su  git -c "git commit -m 'Create puppets repos'  >> $LOG 2>> $LOG"
+      su  git -c "git push  >> $LOG 2>> $LOG"
       echo '>  link repositories with puppet dirs'
       #TODO
       ;;
