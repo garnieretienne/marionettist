@@ -1,0 +1,7 @@
+#!/bin/sh
+# Update a git repository (given as an argument)
+
+umask 002
+DST=$1
+cd ${DST}
+env -i /usr/bin/git pull origin master

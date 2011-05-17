@@ -17,7 +17,8 @@ LOG='/tmp/marionettist.log'           # Log file (regular command output are wri
 # ------------------------------
 declare -A templates
 templates=(
-  ["fqdn"]=$(hostname -f)             # full qualified domain name
+  ["fqdn"]=$(hostname -f),             # full qualified domain name
+  ["hostname"]=$(hostname),
 )
 
 # Options
@@ -29,12 +30,13 @@ usage()
 cat << EOF
 usage: $0 options
 
-The Marionetist - A puppet installation tool
+The Marionettist - A puppet installation tool
 
 OPTIONS:
    -h         show this message
    -a server  install puppet agent
    -m         install puppet master
+   -g key     [master] install a git repo
 
 Distributions supported: ${SUPPORTED[*]}
 EOF
@@ -43,10 +45,13 @@ EOF
 # Default values
 AGENT=false
 MASTER=false
+GIT=false
+KEY=
+KEYNAME=
 SERVER=
 
 # Get options
-while getopts “ha:m” OPTION
+while getopts “ha:mg:” OPTION
 do
      case $OPTION in
          h)
@@ -59,6 +64,10 @@ do
              ;;
          m)
              MASTER=true
+             ;;
+         g)
+             GIT=true
+             KEY=$OPTARG
              ;;
          ?)
              usage
@@ -93,12 +102,68 @@ is_supported?() {
   return 1
 }
 
+# Replace some |variables| by their content in a file
+#   templates["var"]='foo'
+#   template filename
 template() {
   file=$1
   for word in "${!templates[@]}"
   do
     sed -i "s#|$word|#${templates[$word]}#" $file
   done
+}
+
+# Analyse key to extract it name
+#   analyse_key keyfile 
+analyse_key() {
+  keyfile=$1
+  if [[ -f $keyfile ]] # test if file exist 
+  then
+    if su git -c "cat $keyfile >> /dev/null 2>> /dev/null" # test if file is readable by git user
+    then 
+			key_name=`cat $keyfile | awk -F ' ' '{ print $3 }'`
+			if [ ! "$key_name" == "" ] # test if file is in pubkey format (enc+key+name)
+			then
+				KEYNAME=$key_name
+				return 0
+			else
+        echo "!! $keyfile is not a public key"
+				return 1
+			fi
+    else
+      echo "!! $keyfile can't be read by 'git' user"
+      return 1
+    fi
+  else
+    echo "!! $keyfile don't exist"
+    return 1
+  fi
+}
+
+# Init a git reposotiry on the server (/var/git/repositories)
+#   init_repo repo_name
+init_repo() {
+  name=$1
+  cd /var/git/repositories
+  mkdir $name.git  >> $LOG 2>> $LOG
+  cd $name.git
+  git --bare init  >> $LOG 2>> $LOG
+  chown -R git:git .
+}
+
+# Link a local git repository with a folder
+#   link_repo repo_name, folder
+link_repo() {
+  repo=$1
+  path=$2
+  hook="/var/git/repositories/$repo.git/hooks/post-update"
+  echo '#!/bin/sh' > $hook
+  echo "~/bin/update-repo $path" >> $hook
+  chmod 700 $hook  >> $LOG 2>> $LOG
+  chown git:git $hook  >> $LOG 2>> $LOG
+  cd $path/..  >> $LOG 2>> $LOG
+  rm -rf $path  >> $LOG 2>> $LOG
+  git clone /var/git/repositories/$repo.git  >> $LOG 2>> $LOG
 }
 
 # Step and install functions
@@ -212,6 +277,10 @@ general_step_install_puppet() {
       echo '>  install it'
       cd puppet-*  >> $LOG 2>> $LOG
       ruby install.rb  >> $LOG 2>> $LOG
+      # ensure important directories exists
+      mkdir -p /etc/puppet/manifests
+      mkdir -p /var/lib/puppet/modules
+      mkdir -p /var/lib/puppet/files
       ;;
   esac
 }
@@ -238,6 +307,9 @@ master_step_configure_puppet_master() {
       mv puppet.conf /etc/puppet/puppet.conf  >> $LOG 2>> $LOG
       puppetmasterd --onetime  >> $LOG 2>> $LOG
       kill `cat /var/run/puppet/master.pid`  >> $LOG 2>> $LOG
+      # generate the fileserver config file
+      wget --no-check-certificate $REPO/puppet_master/fileserver.conf >> $LOG 2>> $LOG
+      mv fileserver.conf /etc/puppet/fileserver.conf  >> $LOG 2>> $LOG
       # puppet need this folder and thin+config.ru won't start if it not created
       mkdir /var/lib/puppet/rrd >> $LOG 2>> $LOG
       chown puppet:puppet /var/lib/puppet/rrd  >> $LOG 2>> $LOG
@@ -341,6 +413,67 @@ agent_step_start_services() {
   esac
 }
 
+# Master installation step
+# Install a Git repository to manage the modules and manifests
+master_step_install_git_repo() {
+  case $DISTRO in
+    Debian)
+      echo '>  install git server (gitosis)'
+      apt-get -y install gitosis  >> $LOG 2>> $LOG
+      echo '>  clean the installation'
+      userdel gitosis  >> $LOG 2>> $LOG
+      rm -rf /srv/gitosis  >> $LOG 2>> $LOG
+      echo '>  create git user and dir (git, /var/git)'
+      useradd -d /var/git -s /bin/bash git  >> $LOG 2>> $LOG
+      mkdir /var/git  >> $LOG 2>> $LOG
+      chown git:git /var/git  >> $LOG 2>> $LOG
+      echo ">  verify public key ($KEY)"
+      if ! analyse_key $KEY; then echo "!! error in keyfile"; exit; fi
+      templates["admin"]="$KEYNAME"
+      echo ">  init gitosis with the ssh key ($KEYNAME)"
+      chown git:git $LOG # now, git can log in logfile
+      su git -c "gitosis-init < $KEY  >> $LOG 2>> $LOG"
+      chown root:root $LOG # now, root only can log in logfile
+      echo '>  get update-repo script'
+      cd /tmp
+      #wget http://ge.tt/5cZ5k4h/update_repo?type=download  >> $LOG 2>> $LOG # TODO: wget github
+      #mv update_repo?type=download update_repo
+      wget --no-check-certificats $REPO/puppet_master/update_repo >> $LOG 2>> $LOG
+      chmod 700 update_repo  >> $LOG 2>> $LOG
+      chown git:git update_repo  >> $LOG 2>> $LOG
+      mkdir /var/git/bin  >> $LOG 2>> $LOG
+      mv /tmp/update-repo /var/git/bin/  >> $LOG 2>> $LOG
+      echo '>  init modules repository'
+      init_repo modules
+      link_repo modules '/var/lib/puppet/modules'
+      echo '>  init files repository'
+      init_repo files
+      echo '>  init manifests repository'
+      init_repo manifests
+      echo '>  configure repositories in git (modules, manifests, files)'
+      cd /tmp
+      #wget http://ge.tt/43uIjZ4/gitosis.conf?type=download  >> $LOG 2>> $LOG # TODO: wget github
+      #mv gitosis.conf?type=download gitosis.conf
+      wget --no-check-certificats $REPO/puppet_master/gitosis.conf >> $LOG 2>> $LOG
+      template gitosis.conf
+      git clone /var/git/repositories/gitosis-admin.git  >> $LOG 2>> $LOG
+      mv gitosis.conf gitosis-admin/gitosis.conf  >> $LOG 2>> $LOG
+      cd gitosis-admin  >> $LOG 2>> $LOG
+      git add gitosis.conf  >> $LOG 2>> $LOG
+      git config --global user.name "Puppet master install script ($KEYNAME)"  >> $LOG 2>> $LOG
+      git config --global user.email nil@nomail.tld  >> $LOG 2>> $LOG
+      git commit -m 'Create puppets repos'  >> $LOG 2>> $LOG
+      git push  >> $LOG 2>> $LOG
+      echo '>  link repositories with puppet dirs'
+      #TODO
+      ;;
+    *)
+      echo "!! your distribution ($DISTRO) has no declarations for 'master_step_install_git_repo()'"
+      exit 1
+      ;;
+  esac
+}
+
 # Download, install, configure and start 
 # a puppet master and a puppet agent on the server
 install_puppet_master() {
@@ -356,6 +489,11 @@ install_puppet_master() {
   echo ">> install puppet ($PUPPET)"
   general_step_install_puppet
   master_step_configure_puppet_master
+  if $GIT
+  then
+    echo ">> install a git repo"
+    master_step_install_git_repo
+  fi
   echo '>> clean folders'
   general_step_clean_folders
   echo '>> start puppet'
@@ -390,6 +528,10 @@ if $AGENT && $MASTER # means the user has selected to install both a master and 
 then
   echo "!! you can't install an puppet agent and puppet master,"
   echo "!! just install puppet master (-m) will install both."
+  exit
+elif ! $MASTER && $GIT # means the user want to install a git server without installing a master
+then
+  echo "!! you can't install a git server and init a repo without installing a master on the node"
   exit
 elif ! $AGENT && ! $MASTER # means the user has selected nothing
 then
