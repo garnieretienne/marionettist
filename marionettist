@@ -448,8 +448,10 @@ master_step_install_git_repo() {
       link_repo modules '/var/lib/puppet/modules'
       echo '>  init files repository'
       init_repo files
+      link_repo files '/var/lib/puppet/files'
       echo '>  init manifests repository'
       init_repo manifests
+      link_repo manifests '/etc/puppet/manifests'
       echo '>  configure repositories in git (modules, manifests, files)'
       cd /tmp
       #wget http://ge.tt/43uIjZ4/gitosis.conf?type=download  >> $LOG 2>> $LOG # TODO: wget github
