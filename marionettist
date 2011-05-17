@@ -438,7 +438,7 @@ master_step_install_git_repo() {
       cd /tmp
       #wget http://ge.tt/5cZ5k4h/update_repo?type=download  >> $LOG 2>> $LOG # TODO: wget github
       #mv update_repo?type=download update_repo
-      wget --no-check-certificats $REPO/puppet_master/update_repo >> $LOG 2>> $LOG
+      wget --no-check-certificate $REPO/puppet_master/update_repo >> $LOG 2>> $LOG
       chmod 700 update_repo  >> $LOG 2>> $LOG
       chown git:git update_repo  >> $LOG 2>> $LOG
       mkdir /var/git/bin  >> $LOG 2>> $LOG
@@ -454,7 +454,7 @@ master_step_install_git_repo() {
       cd /tmp
       #wget http://ge.tt/43uIjZ4/gitosis.conf?type=download  >> $LOG 2>> $LOG # TODO: wget github
       #mv gitosis.conf?type=download gitosis.conf
-      wget --no-check-certificats $REPO/puppet_master/gitosis.conf >> $LOG 2>> $LOG
+      wget --no-check-certificate $REPO/puppet_master/gitosis.conf >> $LOG 2>> $LOG
       template gitosis.conf
       git clone /var/git/repositories/gitosis-admin.git  >> $LOG 2>> $LOG
       mv gitosis.conf gitosis-admin/gitosis.conf  >> $LOG 2>> $LOG
