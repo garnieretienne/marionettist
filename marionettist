@@ -17,8 +17,8 @@ LOG='/tmp/marionettist.log'           # Log file (regular command output are wri
 # ------------------------------
 declare -A templates
 templates=(
-  ["fqdn"]=$(hostname -f),             # full qualified domain name
-  ["hostname"]=$(hostname),
+  ["fqdn"]=$(hostname -f)             # full qualified domain name
+  ["hostname"]=$(hostname)
 )
 
 # Options
@@ -372,9 +372,10 @@ agent_step_configure_puppet_agent() {
 general_step_clean_folders() {
   case $DISTRO in
     *)
-      cd /tmp  >> $LOG 2>> $LOG
       rm -rf /tmp/facter-*  >> $LOG 2>> $LOG
       rm -rf /tmp/puppet-*  >> $LOG 2>> $LOG
+      rm -rf /tmp/gitosis-admin/
+      rm -f /tmp/dotdeb.gpg
       ;;
   esac
 }
@@ -455,6 +456,7 @@ master_step_install_git_repo() {
       cd /tmp
       wget --no-check-certificate $REPO/puppet_master/gitosis.conf >> $LOG 2>> $LOG
       template gitosis.conf
+      chown git:git $LOG
       su  git -c "git clone /var/git/repositories/gitosis-admin.git  >> $LOG 2>> $LOG"
       mv gitosis.conf gitosis-admin/gitosis.conf  >> $LOG 2>> $LOG
       cd gitosis-admin  >> $LOG 2>> $LOG
@@ -463,8 +465,12 @@ master_step_install_git_repo() {
       su  git -c "git config --global user.email nil@nomail.tld  >> $LOG 2>> $LOG"
       su  git -c "git commit -m 'Create puppets repos'  >> $LOG 2>> $LOG"
       su  git -c "git push  >> $LOG 2>> $LOG"
-      echo '>  link repositories with puppet dirs'
-      #TODO
+      chown root:root $LOG
+      echo '>  git access:'
+      echo ">    - Puppet repos access   : git clone git@${templates['fqdn']}:gitosis-admin.git"
+      echo ">    - Puppet modules repo   : git clone git@${templates['fqdn']}:modules.git"
+      echo ">    - Puppet manifests repo : git clone git@${templates['fqdn']}:manifests.git"
+      echo ">    - Puppet files repo     : git clone git@${templates['fqdn']}:files.git"
       ;;
     *)
       echo "!! your distribution ($DISTRO) has no declarations for 'master_step_install_git_repo()'"
